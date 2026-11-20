@@ -1,119 +1,119 @@
 # smart-resume
 
-Claude Code のプラグイン。うろ覚えの言葉から過去のセッションを探して再開する `/smart-resume` コマンドを足す。
+English | [日本語](README.ja.md)
 
-この文書は、プラグインを入れて使う人と、中身を直す人に向けて、使い方・動き・その設計にした理由を記録する。
+A Claude Code plugin that adds `/smart-resume`: find a past session from whatever you remember about it, and resume it.
+
+This document is for people who install the plugin and people who change it. It records how to use it, how it works, and why it is built this way.
 
 ```
-/smart-resume 決済まわりのバグを直したやつ
+/smart-resume the one where we fixed the payment bug
 ```
 
-と打つと、Haiku が過去のセッションから近いものを 1〜3 件選び、それぞれ「やったこと」の箇条書きつきで並べる。矢印キーで選んで Enter を押すと、組み込みの `/resume` と同じ動きで再開する。
+Haiku picks the 1 to 3 past sessions that match and lists each with bullet points of what was done in it. Choose one with the arrow keys and press Enter: it resumes the way the built-in `/resume` does.
 
-*English: a Claude Code plugin that adds `/smart-resume <what you remember>`. A small model picks the 1–3 past sessions that match, lists what was done in each, and resumes the one you choose with the arrow keys and Enter. The dialog and summaries follow the language you type in.*
+## Install
 
-## インストール
-
-Claude Code のプロンプトで次を実行する。
+At the Claude Code prompt:
 
 ```
 /plugin install smart-resume --marketplace shirakawayohane/claude-smart-resume
 ```
 
-シェルからは次のとおり。
+From a shell:
 
 ```
 claude plugin install smart-resume --marketplace shirakawayohane/claude-smart-resume
 ```
 
-Claude Code 本体には手を入れない。必要なのは Claude Code だけで、Node や Python などの実行環境は使わない。プラグインの hooks module（function hooks）を使うため、この API を持つ版の Claude Code が要る。2.1.329 で動作を確認した。
+Claude Code itself is not modified. Claude Code is the only requirement: no Node, Python or other runtime is used. The plugin is a hooks module (function hooks), so it needs a Claude Code version that has that API. It was verified on 2.1.329.
 
-## 使い方
+## Usage
 
-| 入力 | 動き |
-|------|------|
-| `/smart-resume <探したい内容>` | 検索して候補を出す |
-| `/smart-resume`（引数なし） | プロンプト欄に `/smart-resume ` を入れ直し、続きの入力を求める |
+| Input | What happens |
+|-------|--------------|
+| `/smart-resume <what you are looking for>` | Searches and shows the candidates |
+| `/smart-resume` (no argument) | Puts `/smart-resume ` back in the prompt box and asks you to type the rest |
 
-候補が出たあとの操作は次のとおり。
+Once the candidates are shown:
 
-- `↑` `↓` で選び、`Enter` で再開する。数字キーでも選べる
-- 言葉を変えて探し直すときは、ダイアログ末尾の入力欄（Type something）に書いて `Enter`
-- `Esc` か「どれでもない」で、何もせず閉じる
+- `↑` `↓` to choose, `Enter` to resume. Number keys work too
+- To search again in other words, type them in the dialog's last field (Type something) and press `Enter`
+- `Esc` or "None of these" closes it without doing anything
 
-選んだセッションが開く場所は、組み込みの `/resume` と同じになる。
+Where the chosen session opens is the same as with the built-in `/resume`:
 
-- 同じプロジェクト（同じリポジトリの worktree を含む）のセッションは、その場で再開する
-- 別のディレクトリのセッションは、`cd <場所> && claude --resume <ID>` を表示してクリップボードにコピーする
+- A session of the same project (worktrees of the same repository included) is resumed in place
+- For a session of another directory, `cd <dir> && claude --resume <id>` is shown and copied to the clipboard
 
-## 設定
+## Settings
 
-`/config` から変更できる。
+Change them in `/config`.
 
-| 項目 | 既定値 | 内容 |
-|------|--------|------|
-| `model` | `claude-haiku-5-5` | 候補選びと要約に使うモデル。使えない環境では `haiku` に切り替える |
-| `maxResults` | `3` | 候補の最大数（1〜3） |
-| `language` | `auto` | ダイアログと要約の言語。`auto` では、画面の文言は検索語の言語に、要約は各セッションで使われていた言語に合わせる |
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `model` | `claude-haiku-5-5` | The model that picks and summarizes. Where it is not served, the plugin falls back to `haiku` |
+| `maxResults` | `3` | The most candidates to show (1 to 3) |
+| `language` | `auto` | Language of the dialog and the summaries: `auto`, `ja` or `en`. Under `auto` the on-screen text follows the language of the search words, and each summary follows the language its session was written in |
 
-## 動き
+## How it works
 
-1. **索引を作る。** `~/.claude/history.jsonl`（打ったプロンプトの履歴）をセッションごとにまとめ、各セッションのログ（`~/.claude/projects/<プロジェクト>/<ID>.jsonl`）の末尾 96KB からタイトルと作業フォルダを読む。履歴にないセッションだけ、ログの先頭 256KB からプロンプトを拾う。結果はプラグインのストアに保存し、サイズか更新日時が変わったログだけ読み直す。
-2. **候補を選ぶ。** 全セッションを番号つきの一覧にして、検索語と一緒にモデルへ 1 回渡す。一覧は 9 万字以内に収める。検索語と文字の重なりが多い 40 件と新しい 40 件はプロンプトを詳しく載せ、残りはタイトルと最初のプロンプトだけにする。
-3. **要約する。** 選ばれたセッションごとに、プロンプトとアシスタントの返答の抜粋（ログの先頭・末尾・途中 3 か所）をモデルへ渡し、タイトルと 2〜4 個の箇条書きを作らせる。要約はストアに保存し、ログのサイズが変わるまで使い回す。
-4. **選ばせる。** 箇条書きつきの一覧を会話欄の末尾に描き、その下に Claude Code 標準の選択ダイアログを出す。
-5. **再開する。** 選ばれたセッションの ID で組み込みの `/resume` を実行する。
+1. **Build the index.** `~/.claude/history.jsonl` (the history of typed prompts) is grouped by session, and the title and working directory are read from the last 96 KB of each session log (`~/.claude/projects/<project>/<id>.jsonl`). Only for sessions missing from the history are prompts read from the first 256 KB of the log. The result is kept in the plugin's store, and a log is read again only when its size or modification time changed.
+2. **Pick the candidates.** Every session goes into one numbered list that is handed to the model once, together with the search words. The list is kept under 90,000 characters. The 40 sessions that share the most characters with the search words and the 40 most recent get their prompts in detail; the rest get their title and first prompt.
+3. **Summarize.** For each session picked, the model is given the prompts and excerpts of the assistant's replies (from the start of the log, its end, and three places between) and writes a title and 2 to 4 bullet points. Summaries are kept in the store and reused until the log's size changes.
+4. **Ask.** The list with its bullet points is drawn at the end of the transcript, and Claude Code's standard question dialog opens under it.
+5. **Resume.** The built-in `/resume` is run with the chosen session's id.
 
-セッション約 470 件・ログ合計 6.5GB の環境で、検索から候補表示まで約 4 秒だった（索引 0.3 秒、候補選び 1.7 秒、要約 1.5 秒）。
+On a machine with about 470 sessions and 6.5 GB of logs, candidates appeared about 4 seconds after the search started (index 0.3 s, picking 1.7 s, summaries 1.5 s).
 
-## 設計の理由
+## Why it is built this way
 
-### ログを全部読まず、履歴と先頭・末尾だけを読む
+### Read the history and the ends of each log, never whole logs
 
-セッションのログは 1 本で数百 MB になることがあり、全部読むと検索のたびに数十秒かかる。人が打ったプロンプトは `history.jsonl` にセッション ID つきで残っており、タイトル（`ai-title` / `custom-title` の行）はログの末尾付近に繰り返し書かれる。150 件を抜き取って調べたところ、タイトルを持つ 125 件すべてで、末尾 64KB の中にタイトルの行があった。
+One session log can be hundreds of megabytes, and reading them all would take tens of seconds per search. The prompts a person typed are already in `history.jsonl` with their session id, and the title (the `ai-title` / `custom-title` rows) is written repeatedly near the end of the log. In a sample of 150 logs, all 125 that had a title had a title row within their last 64 KB.
 
-外部コマンド（`grep`、`python` など）でログを走査する案は、入れる人の環境に実行環境を求めることになるため採らなかった。
+Scanning the logs with an external command (`grep`, `python`) was rejected because it would require a runtime on the machine of whoever installs the plugin.
 
-### 候補選びは 1 回の呼び出しで全件を見せる
+### One model call sees every session
 
-先に単語の一致で絞ってからモデルに渡す案は、「右クリック」で探して "right clicks" というタイトルのセッションを落とす。言い換えや言語の違いを吸収するのがモデルを使う理由なので、全件を短い形でも必ず一覧に載せる。
+Narrowing by matching words first and handing only the survivors to the model drops a session titled "right clicks" when the search says 「右クリック」. Absorbing paraphrases and language differences is the reason to use a model at all, so every session is on the list, at least in its short form.
 
-候補選びの effort は `medium` にしている。`low` では、短い形で載っているセッションを読み飛ばして「該当なし」と答える例があった。要約は `low` で足りる。
+The picking call runs at `medium` effort. At `low` there were cases where the model skipped a session listed in its short form and answered that nothing matched. `low` is enough for the summaries.
 
-### 候補の表示は「会話欄の一覧＋標準ダイアログ」にする
+### Candidates are shown as a list in the transcript plus the standard dialog
 
-ペイン（`$.ui.open`）に一覧とボタンを描く実装も作ったが、採らなかった。フルスクリーン表示ではペインが右側にドッキングし、その幅は利用者が以前に決めた幅が優先される。幅 24 桁の環境では箇条書きが 3〜4 行に折り返し、読めなかった。
+A version that drew the list and its buttons in a pane (`$.ui.open`) was built and rejected. In the fullscreen layout a pane docks on the right, and the width the person last set for the dock wins. At a width of 24 columns each bullet point wrapped over 3 to 4 lines and was unreadable.
 
-標準の選択ダイアログ（`$.ui.ask`）は会話欄と同じ幅で出て、矢印キー・Enter・Esc の操作が `/resume` と揃う。ただしプラグインから渡せるのは選択肢のラベルだけで、説明文は付けられない。そのため箇条書きは `$.ui.place` で会話欄の末尾に別に描いている。この一覧は表示専用で、会話の記録にもモデルの入力にも残らない。
+The standard question dialog (`$.ui.ask`) is as wide as the transcript, and its arrow keys, Enter and Esc match `/resume`. A plugin can only pass it option labels, though, not descriptions. So the bullet points are drawn separately at the end of the transcript with `$.ui.place`. That list is display only: it is not kept in the conversation record and the model never reads it.
 
-### 引数なしのときは、プロンプト欄にコマンドを入れ直す
+### With no argument, the command goes back into the prompt box
 
-プラグインから出せる自由入力の画面はペインの入力欄だけで、上と同じ幅の問題がある。プロンプト欄に `/smart-resume ` を入れ直せば、どの表示設定でも同じ幅・同じ操作で続きを書ける。
+The only free-text screen a plugin can open is a field in a pane, which has the width problem above. Putting `/smart-resume ` back in the prompt box gives the same width and the same keys under every display setting.
 
-### 再開は組み込みの `/resume` に任せる
+### Resuming is left to the built-in `/resume`
 
-セッションを切り替える処理をプラグインで持たず、`/resume <ID>` を実行する。再開後の状態が本家と必ず同じになり、Claude Code 側の変更にも追従できる。
+The plugin has no session-switching code of its own: it runs `/resume <id>`. The state after resuming is then always the same as the built-in's, and it follows changes in Claude Code.
 
-`/resume <ID>` は別のディレクトリのセッションを見つけられない（`Session … was not found` になる）。組み込みのピッカーはこの場合に `cd` つきのコマンドを案内するので、同じ案内を出す。その場で開けるかどうかは、プロジェクトのフォルダが同じか、`git worktree list` に作業フォルダが含まれるかで判断する。
+`/resume <id>` does not find a session of another directory (it answers `Session … was not found`). The built-in picker shows a `cd` command in that case, so the plugin shows the same. Whether a session can be opened in place is decided by whether its project folder is the same, or its working directory is in `git worktree list`.
 
-## 制約
+## Limits
 
-- 検索できるのは、このマシンにログが残っているセッションだけである。Claude Code がログを消す設定（既定で 30 日）を過ぎたものは出てこない
-- 人が一度もプロンプトを打っていないセッション（スクリプトからの実行など）は対象外にしている
-- セッションのプロンプトと返答の抜粋を、そのセッションと同じ認証でモデルに送る。費用は利用者のアカウントに計上される。Haiku 5.5 の場合、1 回の検索は入力 10 万トークン以内に収まる
-- `history.jsonl` とセッションログの形式は Claude Code の内部仕様で、版によって変わりうる
+- Only sessions whose logs are still on this machine can be found. Sessions past Claude Code's log retention (30 days by default) do not appear
+- Sessions in which nobody typed a prompt (a script's run, for example) are left out
+- The prompts and reply excerpts of your sessions are sent to the model with the same credentials as the session itself, and the cost is billed to your account. With Haiku 5.5 one search stays under 100,000 input tokens
+- The formats of `history.jsonl` and the session logs are internal to Claude Code and can change between versions
 
-## 開発
+## Development
 
 ```
-claude plugin validate .   # マニフェストと hooks module の検査、型チェック
-claude plugin test .       # hooks/*.test.tsx の実行
-claude --plugin-dir .      # このフォルダから読み込んで起動（保存すると再読み込みされる）
+claude plugin validate .   # checks the manifest and the hooks module, type-checks
+claude plugin test .       # runs hooks/*.test.tsx
+claude --plugin-dir .      # starts with the plugin loaded from this folder (saving a file reloads it)
 ```
 
-| ファイル | 内容 |
-|----------|------|
-| `hooks/register.tsx` | コマンドの登録、検索の流れ、一覧の描画、再開 |
-| `hooks/sessions.ts` | セッションの索引（履歴とログの読み取り、キャッシュ） |
-| `hooks/search.ts` | モデルへの 2 種類の問い合わせ（候補選び、要約） |
-| `types/index.d.ts` | 画面に出す一覧の状態の型 |
+| File | Contents |
+|------|----------|
+| `hooks/register.tsx` | Registers the command, runs the search, draws the list, resumes |
+| `hooks/sessions.ts` | The session index (reading the history and the logs, the cache) |
+| `hooks/search.ts` | The two questions asked of the model (picking, summarizing) |
+| `types/index.d.ts` | The type of the list's on-screen state |
