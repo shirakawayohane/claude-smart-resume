@@ -5,6 +5,7 @@
   "author": {
     "name": "shirakawayohane"
   },
+  "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
     "model": {

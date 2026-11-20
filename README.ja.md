@@ -117,3 +117,7 @@ claude --plugin-dir .      # このフォルダから読み込んで起動（保
 | `hooks/sessions.ts` | セッションの索引（履歴とログの読み取り、キャッシュ） |
 | `hooks/search.ts` | モデルへの 2 種類の問い合わせ（候補選び、要約） |
 | `types/index.d.ts` | 画面に出す一覧の状態の型 |
+
+## ライセンス
+
+[MIT](LICENSE)

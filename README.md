@@ -117,3 +117,7 @@ claude --plugin-dir .      # starts with the plugin loaded from this folder (sav
 | `hooks/sessions.ts` | The session index (reading the history and the logs, the cache) |
 | `hooks/search.ts` | The two questions asked of the model (picking, summarizing) |
 | `types/index.d.ts` | The type of the list's on-screen state |
+
+## License
+
+[MIT](LICENSE)
